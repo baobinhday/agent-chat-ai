@@ -8,6 +8,10 @@ from threading import RLock
 from typing import Dict, Any, Iterable, Optional, Tuple
 
 import yaml
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 _BASE_DIR = Path(__file__).resolve().parents[2]
 _BASE_CONFIG_PATH: Optional[Path] = None  # Base config: app/ai/config/config.yml
@@ -57,6 +61,20 @@ def _shallow_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, 
     result = deepcopy(base)
     result.update(override)
     return result
+
+
+def _expand_env_vars(data: Any) -> Any:
+    """
+    Recursively expand environment variables in strings.
+    """
+    if isinstance(data, dict):
+        return {k: _expand_env_vars(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [_expand_env_vars(v) for v in data]
+    elif isinstance(data, str):
+        return os.path.expandvars(data)
+    else:
+        return data
 
 
 def load_config(force_reload: bool = False) -> Dict[str, Any]:
@@ -115,6 +133,7 @@ def load_config(force_reload: bool = False) -> Dict[str, Any]:
         # Merge configs
         if base_config or override_config:
             config = _shallow_merge(base_config, override_config)
+            config = _expand_env_vars(config)
             print(f"✅ Config merged (base + override)")
         else:
             print("⚠️  Không tìm thấy config files, dùng default fallback")

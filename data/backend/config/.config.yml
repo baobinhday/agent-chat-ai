@@ -7,21 +7,21 @@ server:
     allowed_devices: []
     enabled: true
     expire_seconds: 2592000
-  auth_key: G7X9P4LQ2M8R1ZBD
+  auth_key: "${AUTH_KEY}"
   ip: 0.0.0.0
   port: 8000
   tz: Asia/Ho_Chi_Minh
   vision_explain: http://0.0.0.0:8000/api/v1/vision/explain
-  websocket: ws://192.168.1.4:8000/api/v1/
-  # websocket: ws://0.0.0.0:8000/api/v1/
+  # websocket: ws://192.168.1.4:8000/api/v1/
+  websocket: ws://0.0.0.0:8000/api/v1/
 
 
 
 # Vào `https://www.hivemq.com/` để tạo tài khoản HiveMQ Cloud miễn phí và lấy thông tin kết nối MQTT
 mqtt:
-  url: "mqtts://xxx"        # MQTT broker URL (mqtt:// hoặc mqtts://)
-  username: "admin"                         # Username xác thực (optional)
-  password: "Admin123"                         # Password xác thực (optional)
+  url: "${MQTT_URL}"        # MQTT broker URL (mqtt:// hoặc mqtts://)
+  username: "${MQTT_USERNAME}"                         # Username xác thực (optional)
+  password: "${MQTT_PASSWORD}"                         # Password xác thực (optional)
   keepalive: 60                        # Keepalive interval (giây)
   reconnect_min_delay: 2               # Min delay khi reconnect (giây)
   reconnect_max_delay: 30              # Max delay khi reconnect (giây)
@@ -49,8 +49,8 @@ log:
 
 
 selected_module:
-  LLM: Mega4QwenLLM
-  VLLM: ChatGLMVLLM
+  LLM: ChatLLM
+  VLLM: ChatVLLM
   TTS: HoaiMyEdgeTTS
   Memory: nomem # mem_local_short , mem0ai , nomem
   Intent: function_call
@@ -112,11 +112,11 @@ end_prompt:
 
 LLM:
 
-  Mega4QwenLLM:
+  ChatLLM:
     type: openai
-    base_url: https://ai.megallm.io/v1
-    model_name: qwen/qwen3-next-80b-a3b-instruct
-    api_key: "api_key_here"
+    base_url: "${CHAT_API_URL}"
+    model_name: "${CHAT_MODEL_NAME}"
+    api_key: "${CHAT_API_KEY}"
     temperature: 0.7
     max_tokens: 2000
 
@@ -130,11 +130,11 @@ LLM:
 
 VLLM:
 
-  ChatGLMVLLM:
+  ChatVLLM:
     type: openai
-    model_name: glm-4v-flash 
-    url: https://open.bigmodel.cn/api/paas/v4/
-    api_key: "api_key_here"
+    base_url: "${CHATVLLM_API_URL}"
+    model_name: "${CHATVLLM_MODEL_NAME}"
+    api_key: "${CHATVLLM_API_KEY}"
 
 # ============================================================================
 # TTS - TEXT TO SPEECH (CHUYỂN ĐỔI VĂN BẢN THÀNH GIỌNG NÓI)
@@ -155,7 +155,7 @@ TTS:
 
   ElevenLabsTTS:
     type: elevenlab
-    api_key: "key"
+    api_key: "${ELEVEN_LABS_KEY}"
     api_url: "https://api.elevenlabs.io/v1/text-to-speech"
     voice_id: "foH7s9fX31wFFH2yqrFa" # Default voice ID
     model_id: "eleven_flash_v2_5" # eleven_monolingual_v1, eleven_multilingual_v1, eleven_multilingual_v2

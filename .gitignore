@@ -79,7 +79,7 @@ dist/
 # Docker
 # ============================================================================
 .docker/
-.dockerignore
+
 docker-compose.override.yml
 .env.docker
 

@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  backend:
+    environment:
+      - POSTGRES_SERVER=db
+      - REDIS_CACHE_HOST=redis
+      - REDIS_QUEUE_HOST=redis
+      - MQTT_BROKER=mqtt
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
