@@ -120,6 +120,12 @@ services:
     networks:
       - homebot
 
+  ttsfm:
+    image: dbcccc/ttsfm:latest
+    restart: unless-stopped
+    networks:
+      - homebot
+
 networks:
   homebot:
     driver: bridge
