@@ -288,3 +288,8 @@ Pipfile.lock
 # !.gitkeep        # Keep directory structure with .gitkeep files
 # !data/.gitkeep
 # !backend/src/migrations/versions/.gitkeep
+
+# ============================================================================
+# AI
+# ============================================================================
+CLAUDE.md
