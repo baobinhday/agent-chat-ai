@@ -38,7 +38,7 @@ class TTSProvider(TTSProviderBase):
             "model": self.model,
             "input": text,
             "voice": self.voice,
-            "response_format": "wav",
+            "response_format": self.response_format,
             "speed": self.speed,
         }
         response = requests.post(self.api_url, json=data, headers=headers)
