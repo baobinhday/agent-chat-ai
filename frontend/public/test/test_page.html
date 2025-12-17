@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xiaozhi Server Test Page</title>
+    <link rel="stylesheet" href="css/test_page.css">
+    <script>
+        // Check if opened using file:// protocol
+        if (window.location.protocol === 'file:') {
+            document.addEventListener('DOMContentLoaded', function () {
+                // Create warning box
+                const warningDiv = document.createElement('div');
+                warningDiv.id = 'fileProtocolWarning';
+                warningDiv.innerHTML = `
+                    <h2>⚠️ Warning: Please use HTTP server to open this page</h2>
+                    <p>You are currently using local file protocol (file://) to open the page, which may cause abnormal functionality.</p>
+                    <p>You can use nginx to map and start the test page, or follow the steps below to start a test http server using python:</p>
+                    <ol>
+                        <li>Open command line terminal</li>
+                        <li>Navigate to xiaozhi-server/test directory</li>
+                        <li>Execute the following command to start HTTP server:</li>
+                    </ol>
+                    <pre>python -m http.server 8006</pre>
+                    <p>Then access in browser: <strong>http://localhost:8006/test_page.html</strong></p>
+                `;
+                document.body.appendChild(warningDiv);
+            });
+        }
+    </script>
+</head>
+
+<body>
+    <div class="container">
+        <div id="scriptStatus" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);">
+            Loading Opus library...
+        </div>
+
+        <!-- Two-column layout: Device Config and Connection Info -->
+        <div class="two-column-layout">
+            <!-- Device Configuration Panel -->
+            <div class="section">
+                <h2>
+                    Device Configuration
+                    <button class="toggle-button" id="toggleConfig">Edit</button>
+                </h2>
+                <div class="config-panel" id="configPanel">
+                    <div class="control-panel">
+                        <div class="config-row">
+                            <div class="config-item">
+                                <label for="deviceMac">Device MAC:</label>
+                                <input type="text" id="deviceMac" placeholder="device-id" disabled>
+                            </div>
+                            <div class="config-item">
+                                <label for="deviceName">Device Name:</label>
+                                <input type="text" id="deviceName" value="WebTestDevice" placeholder="deviceName"
+                                    disabled>
+                            </div>
+                        </div>
+                        <div class="config-row">
+                            <div class="config-item">
+                                <label for="clientId">Client ID:</label>
+                                <input type="text" id="clientId" value="web_test_client" placeholder="client-id"
+                                    disabled>
+                            </div>
+                            <div class="config-item">
+                                <label for="token">Auth Token:</label>
+                                <input type="text" id="token" value="your-token1" placeholder="token" disabled>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Connection Information Panel -->
+            <div class="section">
+                <h2>
+                    Connection Information
+                    <span class="connection-status">
+                        <span id="otaStatus" class="status">● OTA Disconnected</span>
+                        <span id="connectionStatus" class="status">● WS Disconnected</span>
+                    </span>
+                    <button class="connect-button" id="connectButton">
+                        Connect
+                    </button>
+                </h2>
+                <div class="connection-controls">
+                    <input type="text" id="otaUrl" value="http://127.0.0.1:8002/xiaozhi/ota/"
+                        placeholder="OTA Server Address, e.g., http://127.0.0.1:8002/xiaozhi/ota/" />
+                    <input type="text" id="serverUrl" value="" readonly disabled
+                        placeholder="Automatically obtained from OTA interface after clicking Connect" />
+                </div>
+            </div>
+
+        </div>
+
+        <div class="section">
+            <div class="tabs">
+                <button class="tab active" data-tab="text">Text Message</button>
+                <button class="tab" data-tab="voice">Voice Message</button>
+            </div>
+
+            <div class="tab-content active" id="textTab">
+                <div class="message-input">
+                    <input type="text" id="messageInput" placeholder="Type message..." disabled>
+                    <button id="sendTextButton" disabled>Send</button>
+                </div>
+            </div>
+
+            <div class="tab-content" id="voiceTab">
+                <div class="audio-controls">
+                    <button id="recordButton" class="record-button" disabled>Start Recording</button>
+                </div>
+                <canvas id="audioVisualizer" class="audio-visualizer"></canvas>
+            </div>
+
+            <div style="margin: -10px 0px 10px 0px;">
+                <span class="connection-status llm-emoji">
+                    <span id="sessionStatus" class="status offline" style="position: relative; display: inline-block;">
+                        <span id="sessionStatusBg"
+                            style="position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: linear-gradient(90deg, rgba(76, 175, 80, 0.2), rgba(33, 150, 243, 0.2)); transition: width 0.15s ease-out, background 0.3s ease; z-index: 0; border-radius: 20px;"></span>
+                        <span style="position: relative; z-index: 1;"><span class="emoji-large">😶</span> Xiaozhi
+                            Offline</span>
+                    </span>
+                </span>
+            </div>
+            <div class="flex-container">
+                <div id="conversation" class="conversation"></div>
+                <div id="logContainer">
+                    <div class="log-entry log-info">Ready, please connect to server to start testing...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MCP Tool Management Area -->
+        <div class="section">
+            <h2>
+                MCP Tool Management
+                <span class="connection-status">
+                    <span id="mcpToolsCount">0 Tools</span>
+                </span>
+                <button class="toggle-button" id="toggleMcpTools">Expand</button>
+            </h2>
+            <div class="config-panel" id="mcpToolsPanel">
+                <div id="mcpToolsContainer" class="mcp-tools-container">
+                    <!-- Tool list will be dynamically inserted here -->
+                </div>
+                <div style="text-align: center; padding: 15px 0;">
+                    <button class="btn" id="addMcpToolBtn" style="background-color: #4caf50;">
+                        ➕ Add New Tool
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MCP Tool Edit Modal -->
+        <div id="mcpToolModal"
+            style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); z-index: 9999; overflow-y: auto;">
+            <div
+                style="background-color: white; border-radius: 10px; padding: 25px; width: 90%; max-width: 700px; margin: 50px auto; max-height: 85vh; overflow-y: auto;">
+                <div
+                    style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #e0e0e0;">
+                    <h2 id="mcpModalTitle" style="font-size: 20px; font-weight: bold; color: #333; margin: 0;">Add Tool
+                    </h2>
+                    <button id="closeMcpModalBtn"
+                        style="background: none; border: none; font-size: 24px; cursor: pointer; color: #666; padding: 0; width: 30px; height: 30px;">&times;</button>
+                </div>
+
+                <div id="mcpErrorContainer"></div>
+
+                <form id="mcpToolForm">
+                    <div style="margin-bottom: 20px;">
+                        <label
+                            style="display: block; margin-bottom: 8px; font-weight: 500; color: #333; font-size: 14px;">Tool
+                            Name
+                            *</label>
+                        <input type="text" id="mcpToolName" placeholder="e.g.: self.get_device_status" required
+                            style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px;">
+                    </div>
+
+                    <div style="margin-bottom: 20px;">
+                        <label
+                            style="display: block; margin-bottom: 8px; font-weight: 500; color: #333; font-size: 14px;">Tool
+                            Description
+                            *</label>
+                        <textarea id="mcpToolDescription"
+                            placeholder="Detailed description of tool function and usage scenarios..." required
+                            style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; min-height: 80px; resize: vertical;"></textarea>
+                    </div>
+
+                    <div style="margin-bottom: 20px;">
+                        <label
+                            style="display: block; margin-bottom: 8px; font-weight: 500; color: #333; font-size: 14px;">Input
+                            Parameters</label>
+                        <div
+                            style="background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 5px; padding: 15px;">
+                            <div id="mcpPropertiesContainer">
+                                <div style="text-align: center; padding: 20px; color: #999; font-size: 14px;">
+                                    No parameters, click button below to add parameters</div>
+                            </div>
+                            <button type="button" id="addMcpPropertyBtn"
+                                style="width: 100%; margin-top: 10px; padding: 8px 15px; border: none; border-radius: 5px; background-color: #2196f3; color: white; cursor: pointer; font-size: 14px;">
+                                ➕ Add Parameter
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 20px;">
+                        <label
+                            style="display: block; margin-bottom: 8px; font-weight: 500; color: #333; font-size: 14px;">
+                            Mock Return Result (JSON format, optional)
+                            <span style="font-size: 12px; color: #999; font-weight: normal;">- Leave empty to return
+                                default success message</span>
+                        </label>
+                        <textarea id="mcpMockResponse" placeholder='{"success": true, "data": "Execution Successful"}'
+                            style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 13px; font-family: 'Courier New', monospace; min-height: 100px; resize: vertical;"></textarea>
+                        <div style="font-size: 12px; color: #666; margin-top: 4px;">
+                            💡 Tip: If mock result is set, the tool will return this JSON object when called
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 25px;">
+                        <button type="button" id="cancelMcpBtn"
+                            style="padding: 8px 15px; border: none; border-radius: 5px; background-color: #9e9e9e; color: white; cursor: pointer; font-size: 14px;">Cancel</button>
+                        <button type="submit"
+                            style="padding: 8px 15px; border: none; border-radius: 5px; background-color: #4caf50; color: white; cursor: pointer; font-size: 14px;">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Opus Decoding Library -->
+    <script src="js/utils/libopus.js"></script>
+
+    <!-- Main App Entry -->
+    <script type="module" src="js/app.js"></script>
+</body>
+
+</html>

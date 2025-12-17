@@ -16,6 +16,7 @@ import {
   TemplatesPage,
   TemplateDetailPage,
   McpConfigsPage,
+  TestPage,
 } from "@/pages";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout, AppHeader, AppSidebar, SidebarInset } from "@/layouts";
@@ -65,6 +66,7 @@ function App() {
         <Route path="/mcp-configs" element={<McpConfigsPage />} />
         <Route path="/templates" element={<TemplatesPage />} />
         <Route path="/templates/:templateId" element={<TemplateDetailPage />} />
+        <Route path="/test" element={<TestPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>

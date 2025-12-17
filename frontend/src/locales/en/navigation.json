@@ -41,7 +41,8 @@
     "mcp_configs": "MCP Configs",
     "templates": "Templates",
     "devices": "Devices",
-    "chat": "Chat"
+    "chat": "Chat",
+    "test": "Test Page"
   },
   "breadcrumb": {
     "home": "Home",

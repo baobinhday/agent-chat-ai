@@ -11,6 +11,7 @@ import {
   Blocks,
   Wrench,
   FileText,
+  FlaskConical,
 } from "lucide-react";
 import {
   Sidebar,
@@ -71,6 +72,12 @@ const MAIN_ITEMS_CONFIG = [
     labelKey: "navigation:sidebar.chat",
     href: "/chat",
     icon: <MessageCircle className="h-4 w-4" />,
+  },
+  {
+    id: "test",
+    labelKey: "navigation:sidebar.test",
+    href: "/test",
+    icon: <FlaskConical className="h-4 w-4" />,
   },
 ];
 
@@ -145,9 +152,9 @@ const useSidebarDimensions = (
 
     const previousExpanded = expandedWidth
       ? (
-          wrapper.style.getPropertyValue("--sidebar-width") ||
-          getComputedStyle(wrapper).getPropertyValue("--sidebar-width")
-        ).trim()
+        wrapper.style.getPropertyValue("--sidebar-width") ||
+        getComputedStyle(wrapper).getPropertyValue("--sidebar-width")
+      ).trim()
       : "";
 
     wrapper.style.setProperty("--sidebar-width-icon", collapsedWidth);

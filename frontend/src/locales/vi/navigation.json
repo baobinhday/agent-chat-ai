@@ -41,7 +41,8 @@
     "mcp_configs": "Cấu hình MCP",
     "templates": "Mẫu",
     "devices": "Thiết Bị",
-    "chat": "Trò Chuyện"
+    "chat": "Trò Chuyện",
+    "test": "Trang Kiểm Tra"
   },
   "breadcrumb": {
     "home": "Trang Chủ",

@@ -15,3 +15,4 @@ export { ToolsPage } from "./ToolsPage";
 export { TemplatesPage } from "./TemplatesPage";
 export { TemplateDetailPage } from "./TemplateDetailPage";
 export { McpConfigsPage } from "./McpConfigsPage";
+export { default as TestPage } from "./TestPage";
