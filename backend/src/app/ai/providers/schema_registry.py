@@ -513,18 +513,9 @@ TTS_DEEPGRAM_SCHEMA = ProviderTypeSchema(
 )
 
 TTS_TTSFM_SCHEMA = ProviderTypeSchema(
-    label="TTSFM WebSocket",
-    description="TTSFM WebSocket Text-to-Speech API (Real-time streaming)",
+    label="TTSFM",
+    description="TTSFM Text-to-Speech API (using ttsfm Python package)",
     fields=[
-        ProviderFieldSchema(
-            name="ws_url",
-            label="WebSocket URL",
-            type=FieldType.STRING,
-            required=False,
-            default="ws://ttsapi.site/ws/generate",
-            placeholder="ws://ttsapi.site/ws/generate",
-            description="TTSFM WebSocket endpoint",
-        ),
         ProviderFieldSchema(
             name="voice",
             label="Voice",
@@ -555,10 +546,10 @@ TTS_TTSFM_SCHEMA = ProviderTypeSchema(
             options=[
                 SelectOption(value="mp3", label="MP3"),
                 SelectOption(value="wav", label="WAV"),
-                SelectOption(value="opus", label="Opus (requires ffmpeg)"),
-                SelectOption(value="aac", label="AAC (requires ffmpeg)"),
-                SelectOption(value="flac", label="FLAC (requires ffmpeg)"),
-                SelectOption(value="pcm", label="PCM (requires ffmpeg)"),
+                SelectOption(value="opus", label="Opus"),
+                SelectOption(value="aac", label="AAC"),
+                SelectOption(value="flac", label="FLAC"),
+                SelectOption(value="pcm", label="PCM"),
             ],
             description="Audio output format",
         ),
@@ -572,16 +563,6 @@ TTS_TTSFM_SCHEMA = ProviderTypeSchema(
             max=4.0,
             step=0.1,
             description="Speech speed (0.25 - 4.0)",
-        ),
-        ProviderFieldSchema(
-            name="timeout",
-            label="Timeout (seconds)",
-            type=FieldType.INTEGER,
-            required=False,
-            default=30,
-            min=5,
-            max=120,
-            description="WebSocket connection timeout",
         ),
     ],
 )
