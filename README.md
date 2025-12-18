@@ -284,6 +284,10 @@ GOOGLE_API_KEY=your-key
 MQTT_BROKER=mqtt
 MQTT_PORT=1883
 
+# PuterAI TTS Provider
+PUTER_USERNAME=your_puter_username
+PUTER_PASSWORD=your_puter_password
+
 # Logging
 LOG_LEVEL=INFO
 ```

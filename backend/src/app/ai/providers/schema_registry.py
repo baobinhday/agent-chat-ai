@@ -12,6 +12,9 @@ from typing import Any
 
 from pydantic import BaseModel
 
+# Import ElevenLabs constants for dynamic schema generation
+from app.ai.custom_lib.putergenai import ELEVENLABS_VOICE_IDS, ELEVENLABS_MODELS
+
 
 class FieldType(str, Enum):
     """Supported field types for provider config."""
@@ -563,6 +566,123 @@ TTS_TTSFM_SCHEMA = ProviderTypeSchema(
             max=4.0,
             step=0.1,
             description="Speech speed (0.25 - 4.0)",
+        ),
+    ],
+)
+
+TTS_PUTERAI_OPENAI_SCHEMA = ProviderTypeSchema(
+    label="PuterAI OpenAI TTS",
+    description="PuterAI Text-to-Speech using OpenAI backend (via Puter.com - no API key needed)",
+    fields=[
+        ProviderFieldSchema(
+            name="token",
+            label="Puter Tokens",
+            type=FieldType.SECRET,
+            required=False,
+            placeholder="token1,token2,token3",
+            description="Puter API tokens (comma-separated). If one token gets insufficient funds, automatically uses next token.",
+        ),
+        ProviderFieldSchema(
+            name="voice",
+            label="Voice",
+            type=FieldType.SELECT,
+            required=False,
+            default="alloy",
+            options=[
+                SelectOption(value="alloy", label="Alloy"),
+                SelectOption(value="ash", label="Ash"),
+                SelectOption(value="ballad", label="Ballad"),
+                SelectOption(value="coral", label="Coral"),
+                SelectOption(value="echo", label="Echo"),
+                SelectOption(value="fable", label="Fable"),
+                SelectOption(value="nova", label="Nova"),
+                SelectOption(value="onyx", label="Onyx"),
+                SelectOption(value="sage", label="Sage"),
+                SelectOption(value="shimmer", label="Shimmer"),
+                SelectOption(value="verse", label="Verse"),
+            ],
+            description="Voice selection",
+        ),
+        ProviderFieldSchema(
+            name="model",
+            label="Model",
+            type=FieldType.SELECT,
+            required=False,
+            default="gpt-4o-mini-tts",
+            options=[
+                SelectOption(value="gpt-4o-mini-tts", label="GPT-4o Mini TTS"),
+            ],
+            description="OpenAI TTS model",
+        ),
+        ProviderFieldSchema(
+            name="instructions",
+            label="Instructions",
+            type=FieldType.STRING,
+            required=False,
+            default="Keep the delivery clear and friendly.",
+            placeholder="Keep the delivery clear and friendly.",
+            description="Instructions for voice style",
+        ),
+        ProviderFieldSchema(
+            name="format",
+            label="Audio Format",
+            type=FieldType.SELECT,
+            required=False,
+            default="mp3",
+            options=[
+                SelectOption(value="mp3", label="MP3"),
+            ],
+            description="Audio output format",
+        ),
+    ],
+)
+
+TTS_PUTERAI_ELEVENLABS_SCHEMA = ProviderTypeSchema(
+    label="PuterAI ElevenLabs TTS",
+    description="PuterAI Text-to-Speech using ElevenLabs backend (via Puter.com - no API key needed)",
+    fields=[
+        ProviderFieldSchema(
+            name="token",
+            label="Puter Tokens",
+            type=FieldType.SECRET,
+            required=False,
+            placeholder="token1,token2,token3",
+            description="Puter API tokens (comma-separated). If one token gets insufficient funds, automatically uses next token.",
+        ),
+        ProviderFieldSchema(
+            name="voice_id",
+            label="Voice ID",
+            type=FieldType.SELECT,
+            required=False,
+            default=ELEVENLABS_VOICE_IDS[0] if ELEVENLABS_VOICE_IDS else "",
+            options=[
+                SelectOption(value=vid, label=vid)
+                for i, vid in enumerate(ELEVENLABS_VOICE_IDS)
+            ],
+            description="ElevenLabs Voice ID",
+        ),
+        ProviderFieldSchema(
+            name="model",
+            label="Model",
+            type=FieldType.SELECT,
+            required=False,
+            default=ELEVENLABS_MODELS[0] if ELEVENLABS_MODELS else "",
+            options=[
+                SelectOption(value=model, label=model)
+                for model in ELEVENLABS_MODELS
+            ],
+            description="ElevenLabs TTS model",
+        ),
+        ProviderFieldSchema(
+            name="format",
+            label="Audio Format",
+            type=FieldType.SELECT,
+            required=False,
+            default="mp3",
+            options=[
+                SelectOption(value="mp3", label="MP3"),
+            ],
+            description="Audio output format",
         ),
     ],
 )
@@ -1169,6 +1289,8 @@ PROVIDER_SCHEMAS: dict[str, dict[str, ProviderTypeSchema]] = {
         "elevenlabs": TTS_ELEVENLAB_SCHEMA,
         "deepgram": TTS_DEEPGRAM_SCHEMA,
         "ttsfm": TTS_TTSFM_SCHEMA,
+        "puterai_openai": TTS_PUTERAI_OPENAI_SCHEMA,
+        "puterai_elevenlabs": TTS_PUTERAI_ELEVENLABS_SCHEMA,
     },
     "ASR": {
         "openai": ASR_OPENAI_SCHEMA,
