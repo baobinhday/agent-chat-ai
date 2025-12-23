@@ -1,3 +1,4 @@
+import asyncio
 import re
 import os
 import json
@@ -243,7 +244,7 @@ def audio_to_data_stream(
     pcm_to_data_stream(raw_data, is_opus, callback)
 
 
-def audio_to_data(audio_file_path: str, is_opus: bool = True) -> list[bytes]:
+async def audio_to_data(audio_file_path: str, is_opus: bool = True) -> list[bytes]:
     """
     Chuyển tệp âm thanh thành danh sách khung mã hóa Opus/PCM
     Args:
@@ -252,49 +253,56 @@ def audio_to_data(audio_file_path: str, is_opus: bool = True) -> list[bytes]:
     """
     import opuslib_next
 
-    # Lấy phần mở rộng của tệp
-    file_type = os.path.splitext(audio_file_path)[1]
-    if file_type:
-        file_type = file_type.lstrip(".")
-    # Đọc tệp âm thanh; tham số -nostdin: không đọc từ stdin nếu không FFmpeg sẽ treo
-    audio = AudioSegment.from_file(
-        audio_file_path, format=file_type, parameters=["-nostdin"]
-    )
+    def _sync_audio_to_data():
+        # Lấy phần mở rộng của tệp
+        file_type = os.path.splitext(audio_file_path)[1]
+        if file_type:
+            file_type = file_type.lstrip(".")
+        # Đọc tệp âm thanh; tham số -nostdin: không đọc từ stdin nếu không FFmpeg sẽ treo
+        audio = AudioSegment.from_file(
+            audio_file_path, format=file_type, parameters=["-nostdin"]
+        )
 
-    # Chuyển sang mono/tần số 16kHz/mã hóa little-endian 16-bit (đảm bảo khớp encoder)
-    audio = audio.set_channels(1).set_frame_rate(16000).set_sample_width(2)
+        # Chuyển sang mono/tần số 16kHz/mã hóa little-endian 16-bit (đảm bảo khớp encoder)
+        audio = audio.set_channels(1).set_frame_rate(16000).set_sample_width(2)
 
-    # Lấy dữ liệu PCM gốc (16-bit little-endian)
-    raw_data = audio.raw_data
+        # Lấy dữ liệu PCM gốc (16-bit little-endian)
+        raw_data = audio.raw_data
 
-    # Khởi tạo bộ mã hóa Opus
-    encoder = opuslib_next.Encoder(16000, 1, opuslib_next.APPLICATION_AUDIO)
+        # Khởi tạo bộ mã hóa Opus
+        encoder = opuslib_next.Encoder(16000, 1, opuslib_next.APPLICATION_AUDIO)
 
-    # Tham số mã hóa
-    frame_duration = 60  # 60ms per frame
-    frame_size = int(16000 * frame_duration / 1000)  # 960 samples/frame
+        # Tham số mã hóa
+        frame_duration = 60  # 60ms per frame
+        frame_size = int(16000 * frame_duration / 1000)  # 960 samples/frame
 
-    datas = []
-    # Xử lý dữ liệu âm thanh theo khung (bao gồm thêm số 0 ở cuối nếu thiếu)
-    for i in range(0, len(raw_data), frame_size * 2):  # 16bit=2bytes/sample
-        # Lấy dữ liệu nhị phân của khung hiện tại
-        chunk = raw_data[i : i + frame_size * 2]
+        datas = []
+        # Xử lý dữ liệu âm thanh theo khung (bao gồm thêm số 0 ở cuối nếu thiếu)
+        for i in range(0, len(raw_data), frame_size * 2):  # 16bit=2bytes/sample
+            # Lấy dữ liệu nhị phân của khung hiện tại
+            chunk = raw_data[i : i + frame_size * 2]
 
-        # Nếu khung cuối không đủ dữ liệu thì chèn thêm số 0
-        if len(chunk) < frame_size * 2:
-            chunk += b"\x00" * (frame_size * 2 - len(chunk))
+            # Nếu khung cuối không đủ dữ liệu thì chèn thêm số 0
+            if len(chunk) < frame_size * 2:
+                chunk += b"\x00" * (frame_size * 2 - len(chunk))
 
-        if is_opus:
-            # Chuyển sang mảng numpy để xử lý
-            np_frame = np.frombuffer(chunk, dtype=np.int16)
-            # Mã hóa dữ liệu Opus
-            frame_data = encoder.encode(np_frame.tobytes(), frame_size)
-        else:
-            frame_data = chunk if isinstance(chunk, bytes) else bytes(chunk)
+            if is_opus:
+                # Chuyển sang mảng numpy để xử lý
+                np_frame = np.frombuffer(chunk, dtype=np.int16)
+                # Mã hóa dữ liệu Opus
+                frame_data = encoder.encode(np_frame.tobytes(), frame_size)
+            else:
+                frame_data = chunk if isinstance(chunk, bytes) else bytes(chunk)
 
-        datas.append(frame_data)
+            datas.append(frame_data)
 
-    return datas
+        return datas
+
+    loop = asyncio.get_running_loop()
+    # Perform synchronized audio processing operations in a separate thread
+    result = await loop.run_in_executor(None, _sync_audio_to_data)
+
+    return result
 
 
 def audio_bytes_to_data_stream(

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from app.ai.utils import textUtils
 from app.ai.utils.util import audio_to_data
 from app.ai.providers.tts.dto.dto import SentenceType
+from app.ai.utils.audioRateController import AudioRateController
 
 if TYPE_CHECKING:
     from app.ai.connection import (
@@ -14,6 +15,9 @@ if TYPE_CHECKING:
     )  # chỉ dùng cho hint, không chạy lúc runtime
 
 TAG = __name__
+
+AUDIO_FRAME_DURATION = 60
+PRE_BUFFER_COUNT = 5
 
 
 async def sendAudioMessage(
@@ -25,7 +29,19 @@ async def sendAudioMessage(
         await send_tts_message(conn, "start", None)
 
     if sentenceType == SentenceType.FIRST:
-        await send_tts_message(conn, "sentence_start", text)
+        # Nếu đã có audio_rate_controller và cùng sentence_id, đưa tin nhắn vào queue
+        if (
+            hasattr(conn, "audio_rate_controller")
+            and conn.audio_rate_controller
+            and getattr(conn, "audio_flow_control", {}).get("sentence_id")
+            == conn.sentence_id
+        ):
+            conn.audio_rate_controller.add_message(
+                lambda: send_tts_message(conn, "sentence_start", text)
+            )
+        else:
+            # Câu mới hoặc chưa có rate controller, gửi ngay
+            await send_tts_message(conn, "sentence_start", text)
 
     await sendAudio(conn, audios)
     # Gửi thông điệp đánh dấu bắt đầu câu
@@ -40,6 +56,29 @@ async def sendAudioMessage(
         conn.client_is_speaking = False
         if conn.close_after_chat:
             await conn.close()
+
+
+async def _wait_for_audio_completion(conn: ConnectionHandler):
+    """
+    Chờ hàng đợi âm thanh rỗng và chờ các gói pre-buffer phát xong
+
+    Args:
+        conn: Đối tượng kết nối
+    """
+    if hasattr(conn, "audio_rate_controller") and conn.audio_rate_controller:
+        rate_controller = conn.audio_rate_controller
+        conn.logger.bind(tag=TAG).debug(
+            f"Đang chờ gửi âm thanh hoàn tất, còn {len(rate_controller.queue)} gói trong hàng đợi"
+        )
+        await rate_controller.queue_empty_event.wait()
+
+        # Chờ các gói pre-buffer phát xong
+        # N gói đầu tiên được gửi trực tiếp, thêm 2 gói network jitter, cần chờ thêm thời gian cho chúng phát xong trên client
+        frame_duration_ms = rate_controller.frame_duration
+        pre_buffer_playback_time = (PRE_BUFFER_COUNT + 2) * frame_duration_ms / 1000.0
+        await asyncio.sleep(pre_buffer_playback_time)
+
+        conn.logger.bind(tag=TAG).debug("Gửi âm thanh hoàn tất")
 
 
 def calculate_timestamp_and_sequence(conn: ConnectionHandler, start_time, packet_index, frame_duration=60):
@@ -90,113 +129,152 @@ async def _send_to_mqtt_gateway(conn: ConnectionHandler, opus_packet, timestamp,
     await conn.send_raw(complete_packet)
 
 
-# Phát âm thanh
-async def sendAudio(conn: ConnectionHandler, audios, frame_duration=60):
+def _get_or_create_rate_controller(conn: ConnectionHandler, frame_duration, is_single_packet):
     """
-    Gửi từng gói Opus, hỗ trợ điều khiển luồng
+    Lấy hoặc tạo RateController và flow_control
+
     Args:
         conn: Đối tượng kết nối
-        opus_packet: Gói dữ liệu Opus đơn
-        pre_buffer: Gửi nhanh phần âm thanh đệm
-        frame_duration: Thời lượng mỗi khung (ms), phù hợp với Opus
-    """
-    if audios is None or len(audios) == 0:
-        return
+        frame_duration: Thời lượng khung
+        is_single_packet: Chế độ gói đơn (True: TTS streaming gói đơn, False: gói hàng loạt)
 
-    if isinstance(audios, bytes):
+    Returns:
+        (rate_controller, flow_control)
+    """
+    # Kiểm tra cần reset: chế độ gói đơn và sentence_id thay đổi, hoặc controller chưa tồn tại
+    need_reset = (
+        is_single_packet
+        and getattr(conn, "audio_flow_control", {}).get("sentence_id")
+        != conn.sentence_id
+    ) or not hasattr(conn, "audio_rate_controller")
+
+    if need_reset:
+        # Tạo hoặc lấy rate_controller
+        if not hasattr(conn, "audio_rate_controller"):
+            conn.audio_rate_controller = AudioRateController(frame_duration)
+        else:
+            conn.audio_rate_controller.reset()
+
+        # Khởi tạo flow_control
+        conn.audio_flow_control = {
+            "packet_count": 0,
+            "sequence": 0,
+            "sentence_id": conn.sentence_id,
+        }
+
+        # Khởi động background sender loop
+        _start_background_sender(
+            conn, conn.audio_rate_controller, conn.audio_flow_control
+        )
+
+    return conn.audio_rate_controller, conn.audio_flow_control
+
+
+def _start_background_sender(conn: ConnectionHandler, rate_controller, flow_control):
+    """
+    Khởi động task gửi nền
+
+    Args:
+        conn: Đối tượng kết nối
+        rate_controller: Bộ điều khiển tốc độ
+        flow_control: Trạng thái điều khiển luồng
+    """
+
+    async def send_callback(packet):
+        # Kiểm tra có nên hủy không
+        if conn.client_abort:
+            raise asyncio.CancelledError("Client đã hủy")
+
+        conn.last_activity_time = time.time() * 1000
+        await _do_send_audio(conn, packet, flow_control)
+        conn.client_is_speaking = True
+
+    # Sử dụng start_sending để khởi động loop nền
+    rate_controller.start_sending(send_callback)
+
+
+async def _send_audio_with_rate_control(
+    conn: ConnectionHandler, audio_list, rate_controller, flow_control, send_delay
+):
+    """
+    Gửi audio packets với rate_controller
+
+    Args:
+        conn: Đối tượng kết nối
+        audio_list: Danh sách gói âm thanh
+        rate_controller: Bộ điều khiển tốc độ
+        flow_control: Trạng thái điều khiển luồng
+        send_delay: Độ trễ cố định (giây), -1 nghĩa là dùng flow control động
+    """
+    for packet in audio_list:
         if conn.client_abort:
             return
 
         conn.last_activity_time = time.time() * 1000
 
-        # Lấy hoặc khởi tạo trạng thái điều khiển luồng
-        if not hasattr(conn, "audio_flow_control"):
-            conn.audio_flow_control = {
-                "last_send_time": 0,
-                "packet_count": 0,
-                "start_time": time.perf_counter(),
-                "sequence": 0,  # Thêm số thứ tự
-            }
-
-        flow_control = conn.audio_flow_control
-        current_time = time.perf_counter()
-        # Tính thời điểm gửi dự kiến
-        expected_time = flow_control["start_time"] + (
-            flow_control["packet_count"] * frame_duration / 1000
-        )
-        delay = expected_time - current_time
-        if delay > 0:
-            await asyncio.sleep(delay)
+        # Pre-buffer: N gói đầu tiên gửi trực tiếp
+        if flow_control["packet_count"] < PRE_BUFFER_COUNT:
+            await _do_send_audio(conn, packet, flow_control)
+            conn.client_is_speaking = True
+        elif send_delay > 0:
+            # Chế độ độ trễ cố định
+            await asyncio.sleep(send_delay)
+            await _do_send_audio(conn, packet, flow_control)
+            conn.client_is_speaking = True
         else:
-            # Hiệu chỉnh sai lệch
-            flow_control["start_time"] += abs(delay)
+            # Chế độ flow control động: chỉ thêm vào queue, để background loop gửi
+            rate_controller.add_audio(packet)
 
-        if conn.conn_from_mqtt_gateway:
-            # Tính timestamp và số thứ tự
-            timestamp, sequence = calculate_timestamp_and_sequence(
-                conn,
-                flow_control["start_time"],
-                flow_control["packet_count"],
-                frame_duration,
-            )
-            # Gọi hàm dùng chung để gửi gói kèm header
-            await _send_to_mqtt_gateway(conn, audios, timestamp, sequence)
-        else:
-            # Gửi trực tiếp gói Opus, không thêm header
-            await conn.send_raw(audios)
 
-        # Cập nhật trạng thái điều khiển luồng
-        flow_control["packet_count"] += 1
-        flow_control["sequence"] += 1
-        flow_control["last_send_time"] = time.perf_counter()
+async def _do_send_audio(conn: ConnectionHandler, opus_packet, flow_control):
+    """
+    Thực hiện gửi audio thực tế
+    """
+    packet_index = flow_control.get("packet_count", 0)
+    sequence = flow_control.get("sequence", 0)
+
+    if conn.conn_from_mqtt_gateway:
+        # Tính timestamp (dựa trên vị trí phát)
+        start_time = time.time()
+        timestamp = int(start_time * 1000) % (2**32)
+        await _send_to_mqtt_gateway(conn, opus_packet, timestamp, sequence)
     else:
-        # Âm thanh dạng tệp sử dụng cách phát thông thường
-        start_time = time.perf_counter()
-        play_position = 0
+        # Gửi trực tiếp gói opus
+        await conn.send_raw(opus_packet)
 
-        # Thực hiện đệm trước
-        pre_buffer_frames = min(3, len(audios))
-        for i in range(pre_buffer_frames):
-            if conn.conn_from_mqtt_gateway:
-                # Tính timestamp và số thứ tự
-                timestamp, sequence = calculate_timestamp_and_sequence(
-                    conn, start_time, i, frame_duration
-                )
-                # Gọi hàm dùng chung để gửi gói kèm header
-                await _send_to_mqtt_gateway(conn, audios[i], timestamp, sequence)
-            else:
-                # Gửi trực tiếp gói đệm, không thêm header
-                await conn.send_raw(audios[i])
-        remaining_audios = audios[pre_buffer_frames:]
+    # Cập nhật trạng thái flow control
+    flow_control["packet_count"] = packet_index + 1
+    flow_control["sequence"] = sequence + 1
 
-        # Phát các khung âm thanh còn lại
-        for i, opus_packet in enumerate(remaining_audios):
-            if conn.client_abort:
-                break
 
-            # Đặt lại trạng thái không có âm thanh
-            conn.last_activity_time = time.time() * 1000
+# Phát âm thanh
+async def sendAudio(conn: ConnectionHandler, audios, frame_duration=AUDIO_FRAME_DURATION):
+    """
+    Gửi gói âm thanh, sử dụng AudioRateController để điều khiển luồng chính xác
 
-            # Tính thời điểm gửi dự kiến
-            expected_time = start_time + (play_position / 1000)
-            current_time = time.perf_counter()
-            delay = expected_time - current_time
-            if delay > 0:
-                await asyncio.sleep(delay)
+    Args:
+        conn: Đối tượng kết nối
+        audios: Gói opus đơn (bytes) hoặc danh sách gói opus
+        frame_duration: Thời lượng khung (ms), mặc định sử dụng hằng số AUDIO_FRAME_DURATION
+    """
+    if audios is None or len(audios) == 0:
+        return
 
-            if conn.conn_from_mqtt_gateway:
-                # Tính timestamp và số thứ tự (sử dụng chỉ số gói hiện tại để đảm bảo liên tục)
-                packet_index = pre_buffer_frames + i
-                timestamp, sequence = calculate_timestamp_and_sequence(
-                    conn, start_time, packet_index, frame_duration
-                )
-                # Gọi hàm dùng chung để gửi gói kèm header
-                await _send_to_mqtt_gateway(conn, opus_packet, timestamp, sequence)
-            else:
-                # Gửi trực tiếp gói Opus, không thêm header
-                await conn.send_raw(opus_packet)
+    send_delay = conn.config.get("tts_audio_send_delay", -1) / 1000.0
+    is_single_packet = isinstance(audios, bytes)
 
-            play_position += frame_duration
+    # Khởi tạo hoặc lấy RateController
+    rate_controller, flow_control = _get_or_create_rate_controller(
+        conn, frame_duration, is_single_packet
+    )
+
+    # Chuyển đổi thống nhất sang danh sách để xử lý
+    audio_list = [audios] if is_single_packet else audios
+
+    # Gửi audio packets
+    await _send_audio_with_rate_control(
+        conn, audio_list, rate_controller, flow_control, send_delay
+    )
 
 
 async def send_tts_message(conn: ConnectionHandler, state, text=None):
@@ -215,8 +293,11 @@ async def send_tts_message(conn: ConnectionHandler, state, text=None):
             stop_tts_notify_voice = conn.config.get(
                 "stop_tts_notify_voice", "config/assets/tts_notify.mp3"
             )
-            audios = audio_to_data(stop_tts_notify_voice, is_opus=True)
+            audios = await audio_to_data(stop_tts_notify_voice, is_opus=True)
             await sendAudio(conn, audios)
+
+        # Chờ tất cả audio packets gửi xong
+        await _wait_for_audio_completion(conn)
         # Xóa trạng thái máy chủ đang nói
         conn.clearSpeakStatus()
 

@@ -1496,6 +1496,11 @@ class ConnectionHandler:
                     except queue.Empty:
                         break
 
+            # Reset the audio flow controller (cancel background tasks and clear the queue)
+            if hasattr(self, "audio_rate_controller") and self.audio_rate_controller:
+                self.audio_rate_controller.reset()
+                self.logger.bind(tag=TAG).debug("已重置音频流控器")
+
             self.logger.bind(tag=TAG).debug(
                 f"Kết thúc dọn: hàng đợi TTS={self.tts.tts_text_queue.qsize()}, hàng đợi âm thanh={self.tts.tts_audio_queue.qsize()}"
             )

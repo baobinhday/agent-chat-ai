@@ -142,6 +142,6 @@ async def max_out_size(conn: ConnectionHandler):
     text = "Xin lỗi nhé, hiện giờ tôi bận một chút, chúng ta trò chuyện tiếp vào giờ này ngày mai nhé! Nhớ hẹn đấy, tạm biệt!"
     await send_stt_message(conn, text)
     file_path = "config/assets/max_output_size.wav"
-    opus_packets = audio_to_data(file_path)
+    opus_packets = await audio_to_data(file_path)
     conn.tts.tts_audio_queue.put((SentenceType.LAST, opus_packets, text))
     conn.close_after_chat = True

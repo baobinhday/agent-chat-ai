@@ -130,7 +130,7 @@ async def checkWakeupWords(conn: ConnectionHandler, text: str):
         }
 
     # Lấy dữ liệu âm thanh
-    opus_packets = audio_to_data(response.get("file_path"))
+    opus_packets = await audio_to_data(response.get("file_path"))
     # Phát phản hồi từ đánh thức
     conn.client_abort = False
 
